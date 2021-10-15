@@ -1,0 +1,71 @@
+
+```{r}
+library(gapminder)
+library(tidyverse)
+```
+
+# exercise 1
+
+# we want to add defensive programming. the function will omit 2017, as it is not present in the dataset
+```{r}
+calcGDP <- function(dat, year=NULL, country=NULL) {
+  if(!is.numeric(year)) {
+  	stop("Year must be numeric")
+  }
+	if(!is.null(year)) {
+    dat <- dat[dat$year %in% year, ]
+  }
+  if (!is.null(country)) {
+    dat <- dat[dat$country %in% country,]
+  }
+  gdp <- dat$pop * dat$gdpPercap
+  new <- cbind(dat, gdp=gdp)
+  return(new)
+}
+calcGDP(gapminder, year= c(1967,1977,1987,1997,2007,2017), country= "Denmark")
+```
+
+
+
+
+
+
+# exercise 2
+
+#I define the upper and lower threshhold values, then i define the countries with a regular expression. The ifelse() function prints whether lifeexp is smaller than 50, between 50-70 or above 70.
+
+```{r}
+lowerThreshold <- 50 
+upperThreshold <- 70
+candidateCountries <- grep("^B", unique(gapminder$country), value=TRUE)
+for( iCountry in candidateCountries){
+    tmp <- mean(subset(gapminder, country==iCountry)$lifeExp)
+    
+    if(tmp < lowerThreshold){
+        cat("Average Life Expectancy in", iCountry, "is less than", lowerThreshold, "\n")
+    }
+    else if(tmp > lowerThreshold && tmp < upperThreshold){
+        cat("Average Life Expectancy in", iCountry, "is between", lowerThreshold, "and", upperThreshold, "\n")
+    }
+    else{
+        cat("Average Life Expectancy in", iCountry, "is greater than", upperThreshold, "\n")
+    }
+    rm(tmp)
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
