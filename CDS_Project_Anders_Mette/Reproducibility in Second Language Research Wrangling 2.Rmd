@@ -1,0 +1,589 @@
+---
+title: "Reproducibility in Second Language Research Wrangling 2"
+author: "Anders Søndergaard Røn & Mette Hejberg Pedersen"
+date: "12/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is the continuation of the wrangling we did in the "Reproducibility in Second Language Research Wrangling 1" file. 
+
+We load the packages we need first
+
+### Load Packages
+```{r}
+library(tidyverse)
+library(broom)
+```
+
+### Load in the data 
+Let's load in the data from both sessions. As stated above, these versions of the data sets have already been partly wrangled. 
+```{r}
+s1_load <- read_csv("session1.csv")[,-1] # we remove the first columns because they only contain numbers
+s2_load <- read_csv("session2.csv")[,-1]
+
+```
+
+### Participants
+#### Session 1
+Right of the bat we want to wrangle some data from a single participant. We discovered that this participant completed the experiment several times, and one of these times, they indicated that "thai" was their native language. Seeing as they indicated that "danish" was their native language as well, we include this participant however only the first attempt of completion. Therefore, we want to change their native language from "thai" to "danish" and subset only their first attempt in both sessions
+
+```{r}
+#raw <- read.delim("raw.txt", header = TRUE)
+#raw <- as_tibble(raw)
+```
+
+First, we create a vector with a placeholder name for the participant we are interested in, which makes the code easier to write
+
+```{r}
+guy <- "MnRo29"
+```
+
+Now we filter the rows of only the participant we are interested in 
+
+```{r}
+guy_rows <- s1_load %>% filter(username %in% guy)
+
+```
+
+Now we filter only rows of the first attempt. We know that there are 69 rows per participant in session 1 and we also know from looking at the data that they are in the right order.
+
+```{r}
+guy_rows <- guy_rows[1:69,]
+```
+
+We create an accuracy column so we later can compute their accuracy. We create the accuracy column in the same way as we have done before 
+
+```{r}
+guy_rows$acc_rating <- with(guy_rows,
+                            ifelse(inputvalue == expected, 1, 0))
+```
+
+We select only the columns in the guy_data data frame that is also in the s1_load data frame
+
+```{r}
+guy_data <- guy_rows %>% select(colnames(s1_load))
+```
+
+We replace their first language with "danish"
+
+```{r}
+guy_data$firstlanguage <- "Danish"
+```
+
+Lastly for the session 1 data, we remove the date info to make adding this participant into the session 1 data easier 
+
+```{r}
+guy_data <- guy_data %>% select(-c("startdate", "enddate"))
+```
+
+#### Session 2
+
+The steps for the session 2 data is very similar to the session 1 data steps. We create a new placeholder name for the participant to make the code easier to write
+
+```{r}
+guy_2 <- "MnRo29"
+```
+
+Then we filter only the data from this participant
+
+```{r}
+guy_row_s2 <- s2_load %>% filter(username %in% "MnRo29")
+```
+
+Now we get only the first attempt which happens to be those responses from 2021-10-30
+
+```{r}
+guy_row_s2 <- filter(guy_row_s2, startdate == "2021-10-30")
+```
+
+Lastly, we select only the columns from the cleaned data 
+
+```{r}
+guy_data_s2 <- guy_row_s2 %>% select(colnames(s2_load))
+```
+
+This should be enough to add this participant into both the session 1 and session 2 data frames. 
+
+### Data Wrangling Session 1
+
+Now let's get back to the session 1 and session 2 data frames. Firstly, we remove unwanted participants. We know these participants do not fit the brief for inclusion in the study from looking at the data. Notice that "MnRo29" is part of the code that excludes participants. We do this because this removes all the unwanted data from this participant. 
+
+```{r}
+s1_load <- s1_load %>% filter(!username %in% c("HITR27", "HEKV5", "MnRo29", "HeMo39"))
+
+```
+
+Next, we add "MnRo29" back into the data, now with only the correct dara 
+
+```{r}
+s1_load <- full_join(s1_load, guy_data)
+```
+
+We filter the data to include only the responses we are interested in. We for example included a lot of familiarization, which is of no interest to the study. Furthermore, we select only the columns we are interested in. In the first wrangling session, we selected many more columns, however we discovered that we only needed information about, username, expected response, accuracy, text on the screen during testing, and equipment to do our analysis.
+
+```{r}
+s1 <- s1_load %>% filter(
+  label == "<p>Did you hear \"s\" or \"z\"?</p>", # the label must say this
+  username %in% unique(s2_load$username), # the participant must have completed both sessions
+  hearing != "hearing_aid", # no participants with hearing aids 
+  firstlanguage %in% c("danish", "Danish", "Dansk") # all must speak L1 Danish 
+) %>%
+  select(username, expected, label, acc_rating, equipment) # selecting relevant variables
+```
+
+Let's rename the columns to something more semantically transparent 
+
+```{r}
+s1 <- s1 %>% rename(
+  Participant = username,
+  Stimulus = expected,
+  Contrast = label,
+  Hit = acc_rating,
+  Equipment = equipment
+)
+```
+
+In the next steps we create new columns, which will make analysis much easier later. Firstly, we create a "position" column which refers to which position the consonant had in the syllables. This makes distinguishing between the position priming group's data from sessions 1 and 2 easier
+
+```{r}
+s1$Position <- "Initial"
+```
+
+Next, we create a "session" column, which also makes it easier to distinguish between sessions 
+```{r}
+s1$Session <- "Session 1"
+```
+
+Lastly, we want to make what is in the "contrast" column more semantically transparent and easier to write when using information in this column for analysis
+
+```{r}
+s1 <- s1 %>% mutate(
+  Contrast = case_when(
+    Contrast == "<p>Did you hear \"s\" or \"z\"?</p>" ~ "s-z",
+  )
+)
+```
+
+The s1 data frame now only include includes the information we are interested in.
+
+##### Visualize the Data 
+Let's plot the session 1 data so get a grip of how difficult the task was.
+
+```{r}
+s1 %>% group_by(Participant, Equipment, Stimulus) %>%
+  summarise(Accuracy = mean(Hit)) %>%
+  ggplot(aes(x = Stimulus, y = Accuracy)) +
+  geom_boxplot() + 
+  geom_jitter(width = 0.1, size = 3) + 
+  stat_summary( # add the mean adds a blue triangle 
+    geom = "point",
+    fun = "mean",
+    col = "black",
+    size = 3,
+    shape = 24,
+    fill = "blue") +
+  theme_classic()
+ 
+ggsave("Figures/s1_boxplot.pdf", 
+       width = 8, height = 6) # takes the latest plot as the first argument
+```
+
+The plot seems to show that the participants answer "z" correctly more often than "s". This is highly surprising because Danish lacks "z" which is often assimilated to Danish "s". To see if there is a difference between the accuracy of these two responses, we model the data.
+
+### Modeling 
+
+Let's create a  linear model of the session 1 data. 
+
+Firstly, we create a subset of the data, so we don't model the wrangled data directly. We also convert the "stimulus" column into a factor, because this is necessary for the treatment coding that the model uses.
+
+Below we create our subset with information about participant, stimulus, and hit. We also convert the stimulus column into a factor below.
+
+```{r}
+s1_subset <- s1 %>% select(Participant, Stimulus, Hit) %>% 
+  mutate(Stimulus = factor(Stimulus, levels = c("s", "z")))
+```
+
+Then we create a new column called accuracy with is the mean of the hit column, which will be on the y-axis.
+
+```{r}
+s1_subset <- s1_subset %>% group_by(Participant, Stimulus) %>% 
+  summarize(Accuracy = mean(Hit))
+```
+
+Here we check the contrasts of the stimulus column to make sure that it is a factor
+
+```{r}
+contrasts(s1_subset$Stimulus) 
+```
+
+The contrast() function confirms that "s" is in the intercept and "z" is at 1 and that it is a factor.  
+
+Now, we are ready to fit the model. We want to fit a linear model where stimulus ("s" or "z") is the predictor of accuracy. The default coding scheme is treatment coding, which means that the "s" responses are in the intercept and the "z" reponses are at 1.
+
+```{r}
+s1_mdl <- lm(Accuracy ~ 1 + Stimulus,
+                data = s1_subset)
+```
+
+Let's see what the model predicts 
+
+```{r}
+summary(s1_mdl)
+```
+
+The model output shows that there is no difference in accuracy of "s" and "z" responses.
+
+### Data Wrangling Session 2
+
+Let's wrangle the data from session 2. First, we remove the unwanted participants. Notice again that "MnRo29" is a part of this code, and we therefore add them back into the data 
+
+```{r}
+s2_load %>% filter(!username %in% c("HITR27", "HEKV5", "MnRo29", "HeMo39")) -> s2_load
+```
+
+```{r}
+s2_load <- full_join(s2_load, guy_data_s2)
+```
+
+Now we filter to include only the responses we are interested in according to label (the text on the screen during testing)
+
+```{r}
+s2 <- s2_load %>%
+  filter(username %in% unique(s1$Participant),
+         label %in% c(
+           "<p>Did you hear \"s\" or \"z\"?</p>",
+           "<p>Did you hear \"f\" or \"th\"?</p>",
+           "<p>Did you hear \"f\" or \"v\"?</p>"
+         )
+      )
+```
+
+We know that there should only be 120 responses per participant and we therefore remove any participants with more than 120 responses
+
+```{r}
+s2 <- s2 %>% filter(username %in% names(table(s2$username)[table(s2$username) <= 120]))
+```
+
+We create the position column by using information in the urls. If the url says "final" then that row should say "final" in the position column. If the url doesn't say "final" then that row should say "initial" in the position column.
+
+```{r}
+s2 <- s2 %>% mutate(
+  Position = ifelse(grepl("final", url), "Final", "Initial")
+)
+```
+
+Now we select the columns were are interested in and rename them to something more semantically transparent. It's important that we rename them the same things that we renamed the same columns in the session 1 data, because we will merge the two data sets
+
+```{r}
+s2 <- s2 %>% select(username, expected, label, acc_rating, equipment, Position) %>%
+  rename(Participant = username, Stimulus = expected, Contrast = label,
+         Hit = acc_rating, Equipment = equipment)
+
+```
+
+We create a grouping variable in order to merge the data sets.
+
+```{r}
+ptts_init_final <-  s2 %>% group_by(Participant) %>% count(Position) %>% filter(n == 60) %>% select(Participant) %>% as_vector() 
+```
+
+We create the session column because it makes it easier to distinguish between the session 1 and session 2 data after we have merged the data sets
+
+```{r}
+s2$Session <- "Session 2"
+```
+
+We rename the contrasts to something more semantically transparent and easier to type if we need to subset according to contrast
+
+```{r}
+s2 <- s2 %>% mutate(
+  Contrast = case_when(
+    Contrast == "<p>Did you hear \"s\" or \"z\"?</p>" ~ "s-z",
+    Contrast == "<p>Did you hear \"f\" or \"th\"?</p>" ~ "f-th",
+    Contrast == "<p>Did you hear \"f\" or \"v\"?</p>" ~ "f-v",
+  )
+)
+```
+
+Again we create a grouping variable to make merging the data sets easier. 
+
+```{r}
+ppt_groups <- s2 %>% mutate(
+  Group = case_when(
+    Contrast == "f-th" ~ "Control",
+    Contrast == "s-z" & Position == "Final" ~ "Position Priming",
+    Contrast == "f-v" ~ "Voicing Priming"
+  )
+) %>% filter(!is.na(Group)) %>% group_by(Participant, Group) %>% count() %>%
+  select(Participant, Group)
+```
+
+### Create Full data set
+
+Let's join the two data sets 
+
+```{r}
+ss <- full_join(s1, s2)
+```
+
+```{r}
+left_join(ss, ppt_groups) -> ss
+```
+
+The code below makes it easier to distinguish between the /s/-/z/ contrast because it is in different positions 
+
+```{r}
+ss <- ss %>% mutate(
+  Contrast = ifelse(Contrast == "s-z" & Position == "Initial", "sV-zV", Contrast),
+  Contrast = ifelse(Contrast == "s-z" & Position == "Final", "Vs-Vz", Contrast)
+)
+```
+
+#### Visualize
+
+Let's visualize the full data set now
+
+```{r}
+ss %>% group_by(Participant, Contrast, Equipment, Position, Session, Group) %>%
+  summarise(Accuracy = mean(Hit)) %>%
+  ggplot(aes(x = Session, y = Accuracy, varwidth = T)) +
+  geom_boxplot(aes(fill = Contrast)) + 
+  scale_color_brewer(palette = 1) +
+  facet_grid(~ Group) +
+  theme_classic() + 
+  xlab(NULL)
+
+ggsave("Figures/s2_boxplot.pdf", 
+       width = 10, height = 8)
+```
+
+It's probably worth mentioning that the dots are outliers and that we keep them in to be transparent as we don't have a lot of participants in this group.
+
+In our modelling we wish to compare accuracy between sessions. If you want to see the motivation for this, look in our report. 
+
+### Modeling
+
+Let's model the data set to see if any of the groups differ across sessions. Firstly, we create a subset of the ss data set
+
+```{r}
+s2_subset <- ss %>% filter(Contrast == "sV-zV") 
+```
+
+Let's plot the data before we fit the model. This is the data that we use for the model
+
+```{r}
+s2_subset %>% group_by(Participant, Session, Group) %>%
+  summarise(Accuracy = mean(Hit)) %>%
+  ggplot(aes(x = Session, y = Accuracy)) +
+  facet_wrap(~ Group) +
+  geom_boxplot() +
+  theme_classic()
+
+ggsave("Figures/s2_premodel.pdf", 
+       width = 8, height = 6)
+```
+
+Because we use categorical predictors again, we need to convert them into factors 
+
+```{r}
+s2_subset <- s2_subset %>% select(Participant, Session, Group, Hit) %>% 
+mutate(
+  Group = factor(Group, levels = c("Control", "Voicing Priming", "Position Priming")),
+  Session = factor(Session, levels = c("Session 1", "Session 2")))
+```
+
+```{r}
+s2_subset <- s2_subset %>% group_by(Participant, Group, Session) %>% 
+  summarise(Accuracy = mean(Hit))
+```
+
+Let's check the contrasts
+
+```{r}
+contrasts(s2_subset$Group)
+contrasts(s2_subset$Session)
+```
+
+Everything looks good. Let's fit a linear model 
+
+```{r}
+s2_mdl <- lm(
+  data = s2_subset,
+  formula =
+    Accuracy ~ Group * Session
+)
+```
+
+Let's see what the model predicts
+
+```{r}
+summary(s2_mdl)
+```
+
+The model output shows that there is no difference between groups in session 1 and that there is no interaction between session and group. 
+
+Now, it looks like the groups differ in their baseline accuracy as well as their accuracy in the priming conditions. Let's see if this is true. First we create a new data frame with only the session 1 data and the data from the priming conditions  
+
+```{r}
+newsubset_session2 <- ss %>%
+  filter(Session == "Session 2",
+         Contrast != "sV-zV") 
+
+```
+
+```{r}
+newsubset_session1 <- ss %>%
+  filter(Session == "Session 1")
+```
+
+```{r}
+newsubset <- full_join(newsubset_session1, newsubset_session2) 
+```
+
+Now we add an accuracy column
+
+```{r}
+newsubset <- newsubset %>% group_by(Participant, Session, Group, Contrast) %>% 
+  summarize(Accuracy = mean(Hit))
+```
+
+Let's plot data
+
+```{r}
+newsubset %>%
+  ggplot(aes(x = Session, y = Accuracy, fill = Contrast)) +
+  geom_boxplot() +
+  facet_wrap(~ Group) + 
+  xlab(NULL) +
+  theme_classic()
+
+ggsave("Figures/s2_primingplot.pdf", 
+       width = 8, height = 6)
+```
+
+Let's fit a linear model for this data
+
+```{r}
+priming_mdl <- lm(
+  data = newsubset,
+  formula =
+    Accuracy ~ Group * Session
+)
+```
+
+```{r}
+summary(priming_mdl)
+```
+
+The model output shows that there is no interaction between group and session here either. 
+
+### Additional modeling 
+
+Seeing as none of the models above provided significant results, we explored other possibilities in our data. We didn't include this in the report, because the we didn't have space and it is only of peripherial interest to the project. 
+
+As a part of the familiarization, the participants were asked whether they thought they could hear the difference between /s/ and /z/. Therefore, we have self-reported data that we can use as a predictor of how well they performed. This is interesting because many studies in linguistics gather self-reported data (the present study included) however self-reported data is highly unreliable. 
+
+Let's start by looking at the self-reports in session 1
+
+#### Wrangling 
+
+In order to this, we create a new subset of the data set where we filter only the rows where the information about whether the participants heard a difference is included 
+
+```{r}
+s1_self <- s1_load %>% filter(
+  label == "<p>Did you hear a difference?</p>", # the label must say this
+  username %in% unique(s2_load$username), # the participant must have completed both sessions
+  hearing != "hearing_aid", # no participants with hearing aids 
+  firstlanguage %in% c("danish", "Danish", "Dansk") # all must speak L1 Danish 
+)
+```
+
+One answered "måske" which is the Danish word for "maybe". Because this uses a special character, R won't recognize it and we therefore substitute "måske" for "maybe" using subsetting instead.
+
+```{r}
+s1_self[20, 2] <- "Maybe"
+```
+
+We can also remove the "expected" column because there was no right or wrong answer for this question. Again, because this data set is small, we do it with subsetting. We remove other all other columns which are present in the s1 data frame, because we will join the s1_additional and s1 data sets later
+
+```{r}
+s1_self <- s1_self[, c(1, 2, 4)]
+```
+
+Now we rename the "username" column to "Participant" so we can join the two data frames 
+
+```{r}
+s1_self <- s1_self %>% 
+  rename(Participant = username)
+```
+
+Now we join the two data frames 
+
+```{r}
+s1_self <- left_join(s1_self, s1)
+```
+
+let's plot this data to see what we are dealing with 
+
+```{r}
+s1_self %>% group_by(Participant, Stimulus, inputvalue) %>% 
+  summarize(Accuracy = mean(Hit)) %>% 
+  ggplot(aes(x = Stimulus, y = Accuracy, fill = inputvalue)) + 
+  geom_boxplot() + 
+  labs(fill = "Did you hear a difference?") +
+  theme_classic()
+```
+
+First of all, looking at the data again, only one participant out of 20 answered that they couldn't hear a difference. This is of course in itself very interesting. Second of all, the plot shows that regardless of the answers given to the question, the participants performed at the same level for /z/. For the /s/ stimulus on the other hand, it seems that those who answered "yes" indeed did identify /s/ more often. 
+
+Seeing as only one participant answered "no", we leave out this participant. Furthermore, it's important to note that there were 13 who answered "yes" and 6 who answered "maybe". 
+
+```{r}
+s1_self %>% filter(inputvalue == "No")
+
+s1_self <- s1_self %>% filter(Participant != "VELO39")
+```
+
+Let's look at only the data from the "s" responses 
+
+```{r}
+s1_self <- s1_self %>% filter(Stimulus == "s")
+```
+
+Let's fit a model that predicts whether answering either "yes" or "maybe" gives you a higher probability of being accurate
+
+To fit a model for this data we need to convert the "inputvalue" and the "Hit" columns into factors. We'll do this much like we did above 
+
+```{r}
+s1_self <- s1_self %>% group_by(Participant, Stimulus, Hit) %>% 
+  mutate(
+    inputvalue = factor(inputvalue, levels = c("Maybe", "Yes")))
+```
+
+```{r}
+s1_self <- s1_self %>% group_by(Participant, Stimulus, inputvalue) %>% 
+  summarize(Accuracy = mean(Hit))
+```
+
+Now we can model the data 
+
+```{r}
+s1_self_mdl <- lm(Accuracy ~ 1 + inputvalue,
+                data = s1_self)
+```
+
+Let's see what the model predicted 
+
+```{r}
+summary(s1_self_mdl)
+```
+
+So the model output shows that participants were not more likely to be correct depending on whether they answered "yes" or "maybe" only for the "s" responses. 
+
+None of our models showed significant results and we therefore end with a null result. 
+
+

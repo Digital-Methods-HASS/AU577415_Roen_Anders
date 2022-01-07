@@ -1,0 +1,126 @@
+---
+title: "Reproducibility in Second Language Research Wrangling 1"
+author: "Anders Søndergaard Røn & Mette Hejberg Pedersen"
+date: "13/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This wrangling session takes the data (sessions 1 and 2) retrieved from the PERCY software and explores what information it contains. To do this, we firstly, load the package we need.
+
+### Load Package
+
+```{r}
+library(tidyverse)
+```
+
+### Initial Data Wrangling Session 1
+
+Let's take a look at the data from sesison 1
+
+```{r}
+first_results_raw<- read_tsv("First_session_17_11.txt")
+
+first_results_raw
+```
+
+There is a lot of rows and columns! We know that the earliest attempts are ourselves trying out the experiment and we therefore don't want to use that data. We also know when the first results that we want to use came in. Therefore, we want to sort the data according to date. Let's first see what type of data the dates are in the data frame
+
+```{r}
+class(first_results_raw$startdate)
+```
+
+They are of characters instead of dates. So we need to convert them into dates first and then select the dates we want 
+
+```{r}
+tidy_first_results_raw <- first_results_raw %>%
+  mutate(startdate = as.Date(startdate, format = "%d.%m.%Y")) %>% #converting to date
+  mutate(enddate= as.Date(enddate, format = "%d.%m.%Y")) %>%
+  arrange(startdate) %>% #arrange it in ascending order
+  filter(startdate >= "2021-10-26") #select the dates we want
+```
+
+Let's check to see if it worked 
+
+```{r}
+class(tidy_first_results_raw$startdate)
+```
+
+It did! 
+
+Now we select the columns we know we might need. We want information about the participants' usernames, their responses, expected responses, text presented on the screen during testing, accuracy, equipment, hearing level, environment, session, first and second languages, and dates. We select these below
+
+```{r}
+first_sesh_frame <- select(tidy_first_results_raw, username,
+                           inputvalue, expected, label, firstlanguage,
+                           hearing, environment, equipment, experiment,
+                           foreignlanguages, startdate, enddate)
+```
+
+We want to create an accuracy column that puts in a 1 when the participant answers correctly and puts in a 0 when they do not.
+
+```{r}
+first_sesh_frame <- first_sesh_frame %>%
+  mutate(acc_rating = if_else(inputvalue == expected,
+                              1,
+                              0))
+```
+
+At this point we realized that we had overassigned and therefore had not been very efficient, and therefore we decided to convert the current state of the data into a csv file which we saved in the current working directory and start a new markdown file.
+
+```{r}
+write.csv(first_sesh_frame, "session1.csv")
+```
+
+Now we want to do the same operations on the session 2 data 
+
+### Initial Data Wrangling Session 2
+
+Firstly, we load in the data 
+
+```{r}
+second_results_raw <- read_tsv("Second_session_17_11.txt")
+```
+
+Because we know from above that the dates are characters, we convert the dates from characters to dates 
+
+```{r}
+tidy_second_results_raw <- second_results_raw %>%
+  mutate(startdate= as.Date(startdate, format = "%d.%m.%Y")) %>% #converting to Date
+  mutate(enddate= as.Date(enddate, format = "%d.%m.%Y")) %>%
+  arrange(startdate) %>% #arrange it in ascending order
+  filter(startdate >= "2021-10-26") #select the dates we want
+```
+
+And select the columns we know we might need. We select the same columns as above adding url because we need it to subset the data.  
+
+```{r}
+#the dataframe we need for measuring second-session accuracy
+second_sesh_frame <- select(tidy_second_results_raw, username,
+                           inputvalue, expected, label, firstlanguage,
+                           hearing, environment, equipment, experiment,
+                           foreignlanguages, startdate, enddate, url)
+```
+
+Again, because we know from above that there isn't an accuracy column, we create on using the same code as before.
+
+```{r}
+second_sesh_frame <- second_sesh_frame %>%
+  mutate(acc_rating = if_else(inputvalue == expected,
+                              1,
+                              0))
+```
+
+We save the current state of the data in the working directory and start a new markdown.
+
+```{r}
+write.csv(second_sesh_frame, "session2.csv")
+```
+
+The new markdown that contains the rest of the wrangling and analysis for both sessions is called "Reproducibility in Second Language Research wrangling 2" 
+
+
+
